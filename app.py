@@ -39,7 +39,8 @@ def format_history(history):
 
 
 def build_prompt(history, context, question):
-    ctx = "\n---\n".join(context)
+    ctx = "\n---\n".join(context) if context else ""
+
     hist = format_history(history)
 
     prompt = ""
@@ -47,10 +48,22 @@ def build_prompt(history, context, question):
     if hist:
         prompt += f"Conversation:\n{hist}\n\n"
 
-    prompt += f"Context:\n{ctx}\n\n"
-    prompt += f"User: {question}\nAssistant:"
+    prompt += f"""
+You are a financial literacy assistant who explains concepts in a simple and practical way.
 
-    return prompt
+Stay within the domain of finance, but respond naturally and conversationally.
+Use the provided context if it is helpful, otherwise rely on your general knowledge.
+
+Keep responses clear, useful, and easy to understand.
+
+Context:
+{ctx}
+
+User: {question}
+Assistant:
+"""
+
+    return prompt.strip()
 
 
 def chat_stream(prompt):
