@@ -53,17 +53,28 @@ def build_prompt(history, context, question):
     return prompt
 
 
-def chat(prompt):
-    res = ollama.chat(
+def chat_stream(prompt):
+    stream = ollama.chat(
         model=LLM_MODEL,
         messages=[
             {"role": "system", "content": "Answer concisely using provided context. Do not hallucinate."},
             {"role": "user", "content": prompt}
         ],
+        stream=True,
         options={"num_predict": 512, "temperature": 0.3}
     )
-    return res["message"]["content"].strip()
 
+    full_response = ""
+
+    print("\nAssistant: ", end="", flush=True)
+
+    for chunk in stream:
+        token = chunk["message"]["content"]
+        print(token, end="", flush=True)
+        full_response += token
+
+    print("\n")
+    return full_response.strip()
 
 def main():
     collection = get_collection()
@@ -83,9 +94,7 @@ def main():
         try:
             context = retrieve(user_input, collection)
             prompt = build_prompt(history[-MAX_HISTORY:], context, user_input)
-            response = chat(prompt)
-
-            print(f"\nAssistant: {response}\n")
+            response = chat_stream(prompt)
 
             history.append({"user": user_input, "assistant": response})
 
