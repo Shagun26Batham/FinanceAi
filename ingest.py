@@ -21,19 +21,45 @@ logger = logging.getLogger(__name__)
 
 
 def load_all_csvs(data_dir: str):
+    data_path = Path(data_dir)
+    if not data_path.exists() or not data_path.is_dir():
+        logger.error(f"Data directory '{data_dir}' does not exist.")
+        return []
+
     rows = []
-    csv_files = list(Path(data_dir).glob("*.csv"))
+    csv_files = list(data_path.glob("*.csv"))
+    if not csv_files:
+        logger.warning(f"No CSV files found in '{data_dir}'.")
+        return []
+
     logger.info(f"CSV files found: {len(csv_files)}")
 
     for csv_path in csv_files:
         with open(csv_path, newline="", encoding="utf-8") as f:
             reader = csv.DictReader(f)
             for row in reader:
-                q = (row.get("question") or "").strip()
-                a = (row.get("answer") or "").strip()
-                if q and a:
+                parts = []
+                for k, v in row.items():
+                    if not k or not v:
+                        continue
+                    k_str = str(k).strip()
+                    v_str = str(v).strip()
+                    if not v_str:
+                        continue
+                        
+                    if k_str.lower() == "text":
+                        parts.append(v_str)
+                    elif k_str.lower() == "question":
+                        parts.append(f"Q: {v_str}")
+                    elif k_str.lower() == "answer":
+                        parts.append(f"A: {v_str}")
+                    else:
+                        parts.append(f"{k_str}: {v_str}")
+                
+                if parts:
+                    row_text = "\n".join(parts)
                     rows.append({
-                        "text": f"[SOURCE: {csv_path.name}] Q: {q}\nA: {a}"
+                        "text": f"[SOURCE: {csv_path.name}]\n{row_text}"
                     })
 
     return rows
@@ -91,28 +117,34 @@ def build_index(chunks):
     if not new_chunks:
         return
 
-    for i in range(0, len(new_chunks), BATCH_SIZE):
-        batch = new_chunks[i:i + BATCH_SIZE]
+    try:
+        for i in range(0, len(new_chunks), BATCH_SIZE):
+            batch = new_chunks[i:i + BATCH_SIZE]
 
-        texts = [c["text"] for c in batch]
-        embeddings = []
+            texts = [c["text"] for c in batch]
+            embeddings = []
 
-        for text in texts:
-            res = ollama.embeddings(model=EMBED_MODEL, prompt=text)
-            embeddings.append(res["embedding"])
+            for text in texts:
+                res = ollama.embeddings(model=EMBED_MODEL, prompt=text)
+                embeddings.append(res["embedding"])
 
-        ids = [c["hash"] for c in batch]
-        metadatas = [{"hash": c["hash"]} for c in batch]
+            ids = [c["hash"] for c in batch]
+            metadatas = [{"hash": c["hash"]} for c in batch]
 
-        collection.add(
-            ids=ids,
-            embeddings=embeddings,
-            documents=texts,
-            metadatas=metadatas
-        )
+            collection.add(
+                ids=ids,
+                embeddings=embeddings,
+                documents=texts,
+                metadatas=metadatas
+            )
+    except Exception as e:
+        logger.error(f"Failed to connect to Ollama ({e}). Ensure it is running and '{EMBED_MODEL}' is pulled.")
 
 
 if __name__ == "__main__":
     rows = load_all_csvs(DATA_DIR)
-    chunks = prepare_chunks(rows)
-    build_index(chunks)
+    if not rows:
+        logger.info("No data to process. Exiting.")
+    else:
+        chunks = prepare_chunks(rows)
+        build_index(chunks)

@@ -5,7 +5,7 @@ CHROMA_PATH = "db/chroma_db"
 COLLECTION_NAME = "rag_chatbot"
 
 EMBED_MODEL = "nomic-embed-text"
-LLM_MODEL = "llama3:8b"
+LLM_MODEL = "phi3:latest"
 
 TOP_K = 3
 MAX_HISTORY = 5
@@ -22,6 +22,9 @@ def embed_query(query):
 
 
 def retrieve(query, collection):
+    if collection.count() == 0:
+        return []
+        
     emb = embed_query(query)
     results = collection.query(query_embeddings=[emb], n_results=TOP_K)
     return results["documents"][0] if results["documents"] else []
@@ -77,16 +80,20 @@ def main():
         if user_input.lower() == "exit":
             break
 
-        context = retrieve(user_input, collection)
-        prompt = build_prompt(history[-MAX_HISTORY:], context, user_input)
-        response = chat(prompt)
+        try:
+            context = retrieve(user_input, collection)
+            prompt = build_prompt(history[-MAX_HISTORY:], context, user_input)
+            response = chat(prompt)
 
-        print(f"\nAssistant: {response}\n")
+            print(f"\nAssistant: {response}\n")
 
-        history.append({"user": user_input, "assistant": response})
+            history.append({"user": user_input, "assistant": response})
 
-        if len(history) > MAX_HISTORY:
-            history = history[-MAX_HISTORY:]
+            if len(history) > MAX_HISTORY:
+                history = history[-MAX_HISTORY:]
+
+        except Exception as e:
+            print(f"\n[Error: {e}]\nPlease make sure Ollama is running and both 'phi3:latest' and 'nomic-embed-text' are installed via 'ollama pull <model>'\n")
 
 
 if __name__ == "__main__":
