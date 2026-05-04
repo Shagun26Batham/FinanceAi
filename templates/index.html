@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="FinanceAI – Your private, offline financial advisor powered by Phi-3 and ChromaDB." />
+  <title>FinanceAI – Private Financial Advisor</title>
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,300;0,14..32,400;0,14..32,500;0,14..32,600;0,14..32,700;0,14..32,800;1,14..32,400&display=swap" rel="stylesheet" />
+
+  <!-- Marked.js for Markdown rendering -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+  <link rel="stylesheet" href="/static/css/style.css" />
+</head>
+<body>
+
+  <!-- ── Main chat shell ──────────────────────────────────────────── -->
+  <div class="app-shell">
+
+    <!-- ── Header ──────────────────────────────────────────────────── -->
+    <header class="chat-header" role="banner">
+      <div class="header-brand">
+        <div class="brand-icon" aria-hidden="true">
+          <svg viewBox="0 0 20 20" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="2,14 7,8 11,11 18,4"/>
+            <circle cx="18" cy="4" r="1.5" fill="#fff" stroke="none"/>
+          </svg>
+        </div>
+        <div class="brand-text">
+          <h1 class="header-title">FinanceAI</h1> <!--project name -->
+          <!-- <span class="header-sub">Powered by Phi-3 &amp; RAG &middot; 100% local</span> -->
+        </div>
+      </div>
+
+      <div class="header-actions">
+        <div class="online-pill" title="Model is running locally">
+          <span class="pulse-dot" aria-hidden="true"></span>
+          Online
+        </div>
+
+        <!-- Dark / Light toggle -->
+        <button
+          id="btn-theme-toggle"
+          class="theme-toggle"
+          title="Toggle dark mode"
+          aria-label="Toggle dark mode"
+          aria-pressed="false"
+        >
+          <!-- Sun icon (shown in light mode) -->
+          <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="4"/>
+            <line x1="12" y1="2"  x2="12" y2="4"/>
+            <line x1="12" y1="20" x2="12" y2="22"/>
+            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
+            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+            <line x1="2"  y1="12" x2="4"  y2="12"/>
+            <line x1="20" y1="12" x2="22" y2="12"/>
+            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
+            <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+          </svg>
+          <!-- Moon icon (shown in dark mode) -->
+          <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+          </svg>
+        </button>
+
+        <button id="btn-clear-chat" class="clear-btn" title="Clear conversation" aria-label="Clear chat">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <polyline points="3,6 5,6 17,6"/>
+            <path d="M8 6V4a1 1 0 011-1h2a1 1 0 011 1v2"/>
+            <path d="M7,6l1,11h4l1-11"/>
+            <line x1="10" y1="11" x2="10" y2="15"/>
+          </svg>
+          <span>Clear</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- ── Messages ─────────────────────────────────────────────────── -->
+    <section id="chat-messages" class="chat-messages" aria-live="polite" aria-label="Chat messages">
+
+      <!-- Welcome card -->
+      <div class="welcome-card" id="welcome-card">
+        <div class="welcome-icon" aria-hidden="true">
+          <svg viewBox="0 0 28 28" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="3,20 9,12 14,15 22,6"/>
+            <circle cx="22" cy="6" r="2" fill="#fff" stroke="none"/>
+          </svg>
+        </div>
+        <h2>Your private financial advisor</h2>
+        <p>Ask me anything about investing, budgeting, taxes, or personal finance.<br>All processing happens <strong>locally on your machine</strong> — zero data leaves your device.</p>
+        <div class="welcome-chips" id="welcome-chips">
+          <button class="chip" data-prompt="What are the best strategies to save money each month?">
+            <span class="chip-icon">💡</span> Saving strategies
+          </button>
+          <button class="chip" data-prompt="Explain index funds for a beginner.">
+            <span class="chip-icon">📈</span> Index funds 101
+          </button>
+          <button class="chip" data-prompt="How do I build an emergency fund?">
+            <span class="chip-icon">🏦</span> Emergency fund
+          </button>
+          <button class="chip" data-prompt="What is the difference between a Roth IRA and a traditional IRA?">
+            <span class="chip-icon">🔄</span> Roth vs Traditional IRA
+          </button>
+          <button class="chip" data-prompt="How should I diversify my investment portfolio?">
+            <span class="chip-icon">📊</span> Portfolio diversification
+          </button>
+          <button class="chip" data-prompt="What are the tax advantages of a 401(k)?">
+            <span class="chip-icon">🧾</span> 401(k) tax benefits
+          </button>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- Typing indicator (hidden by default) -->
+    <div id="typing-indicator" class="typing-indicator hidden" aria-label="Assistant is thinking" aria-hidden="true">
+      <div class="typing-avatar" aria-hidden="true">
+        <svg viewBox="0 0 20 20" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="2,14 7,8 11,11 18,4"/>
+          <circle cx="18" cy="4" r="1.5" fill="#fff" stroke="none"/>
+        </svg>
+      </div>
+      <div class="typing-body">
+        <span class="typing-label">FinanceAI is thinking</span>
+        <div class="typing-dots" aria-hidden="true">
+          <span></span><span></span><span></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Input bar ─────────────────────────────────────────────────── -->
+    <footer class="chat-input-bar" role="contentinfo">
+      <div class="input-wrap">
+        <div class="input-container" id="input-container">
+          <textarea
+            id="user-input"
+            class="chat-input"
+            placeholder="Ask about investing, budgeting, taxes…"
+            rows="1"
+            aria-label="Your message"
+            autocomplete="off"
+            spellcheck="true"
+          ></textarea>
+          <button id="send-btn" class="send-btn" aria-label="Send message" title="Send (Enter)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <line x1="22" y1="2" x2="11" y2="13"/>
+              <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+            </svg>
+          </button>
+        </div>
+        <p class="input-hint">
+          Press <kbd>Enter</kbd> to send &nbsp;&middot;&nbsp; <kbd>Shift+Enter</kbd> for new line &nbsp;&middot;&nbsp; All data stays on your device 🔒
+        </p>
+      </div>
+    </footer>
+
+  </div><!-- /.app-shell -->
+
+  <script src="/static/js/app.js"></script>
+</body>
+</html>

@@ -1,31 +1,45 @@
+import json
 import chromadb
 import ollama
+from flask import Flask, request, jsonify, render_template, Response, stream_with_context
+from flask_cors import CORS
 
-CHROMA_PATH = "db/chroma_db"
+# ── Config ───────────────────────────────────────────────────────────────────
+CHROMA_PATH     = "db/chroma_db"
 COLLECTION_NAME = "rag_chatbot"
+EMBED_MODEL     = "nomic-embed-text"
+LLM_MODEL       = "phi3:latest"
+TOP_K           = 3
+MAX_HISTORY     = 5
 
-EMBED_MODEL = "nomic-embed-text"
-LLM_MODEL = "phi3:latest"
+SYSTEM_PROMPT = (
+    "You are a smart financial advisor who explains things clearly and naturally. "
+    "Avoid robotic responses. Do not give generic greetings. "
+    "Be practical and helpful. Keep answers concise."
+)
 
-TOP_K = 3
-MAX_HISTORY = 5
+# ── Flask app ─────────────────────────────────────────────────────────────────
+app = Flask(__name__)
+CORS(app)
 
+# In-memory conversation history  [{user: ..., assistant: ...}, ...]
+conversation_history = []
 
+# ── RAG helpers ───────────────────────────────────────────────────────────────
 def get_collection():
     client = chromadb.PersistentClient(path=CHROMA_PATH)
     return client.get_or_create_collection(name=COLLECTION_NAME)
 
 
-def embed_query(query):
+def embed_query(query: str):
     res = ollama.embeddings(model=EMBED_MODEL, prompt=query)
     return res["embedding"]
 
 
-def retrieve(query, collection):
+def retrieve(query: str, collection):
     if collection.count() == 0:
         return []
-        
-    emb = embed_query(query)
+    emb     = embed_query(query)
     results = collection.query(query_embeddings=[emb], n_results=TOP_K)
     return results["documents"][0] if results["documents"] else []
 
@@ -38,85 +52,121 @@ def format_history(history):
     return "\n".join(lines)
 
 
-def build_prompt(history, context, question):
-    ctx = "\n---\n".join(context) if context else ""
-
+def build_prompt(history, context, question: str) -> str:
+    ctx  = "\n---\n".join(context) if context else ""
     hist = format_history(history)
 
     prompt = ""
-
     if hist:
         prompt += f"Conversation:\n{hist}\n\n"
 
-    prompt += f"""
-You are a financial literacy assistant who explains concepts in a simple and practical way.
+    prompt += (
+        "You are a financial literacy assistant who explains concepts in a simple "
+        "and practical way.\n\n"
+        "Stay within the domain of finance, but respond naturally and conversationally.\n"
+        "Use the provided context if it is helpful, otherwise rely on your general knowledge.\n"
+        "Keep responses clear, useful, and easy to understand.\n\n"
+    )
 
-Stay within the domain of finance, but respond naturally and conversationally.
-Use the provided context if it is helpful, otherwise rely on your general knowledge.
+    if ctx:
+        prompt += f"Context:\n{ctx}\n\n"
 
-Keep responses clear, useful, and easy to understand.
-
-Context:
-{ctx}
-
-User: {question}
-Assistant:
-"""
-
+    prompt += f"User: {question}\nAssistant:"
     return prompt.strip()
 
 
-def chat_stream(prompt):
-    stream = ollama.chat(
-        model=LLM_MODEL,
-        messages=[
-            {"role": "system", "content": "Answer concisely using provided context. Do not hallucinate."},
-            {"role": "user", "content": prompt}
-        ],
-        stream=True,
-        options={"num_predict": 512, "temperature": 0.3}
-    )
+# ── SSE helper ────────────────────────────────────────────────────────────────
+def sse(event: str, data: str) -> str:
+    """Format a single Server-Sent Event frame."""
+    payload = json.dumps({"data": data})
+    return f"event: {event}\ndata: {payload}\n\n"
 
-    full_response = ""
 
-    print("\nAssistant: ", end="", flush=True)
+# ── Routes ────────────────────────────────────────────────────────────────────
+@app.route("/")
+def index():
+    return render_template("index.html")
 
-    for chunk in stream:
-        token = chunk["message"]["content"]
-        print(token, end="", flush=True)
-        full_response += token
 
-    print("\n")
-    return full_response.strip()
+@app.route("/chat", methods=["POST"])
+def chat_endpoint():
+    """
+    Streaming endpoint.
+    Emits SSE events:
+      event: token  →  one token of the assistant reply
+      event: done   →  signals end-of-stream (no data needed)
+      event: error  →  error message string
+    """
+    global conversation_history
 
-def main():
-    collection = get_collection()
-    history = []
+    data         = request.get_json(force=True)
+    user_message = (data.get("message") or "").strip()
 
-    print("Chatbot ready. Type 'exit' to quit.\n")
+    if not user_message:
+        return jsonify({"error": "Empty message"}), 400
 
-    while True:
-        user_input = input("You: ").strip()
+    # Build prompt synchronously (fast) before opening the stream
+    try:
+        collection = get_collection()
+        context    = retrieve(user_message, collection)
+        prompt     = build_prompt(conversation_history[-MAX_HISTORY:], context, user_message)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
-        if not user_input:
-            continue
-
-        if user_input.lower() == "exit":
-            break
-
+    def generate():
+        full_reply = []
         try:
-            context = retrieve(user_input, collection)
-            prompt = build_prompt(history[-MAX_HISTORY:], context, user_input)
-            response = chat_stream(prompt)
+            stream = ollama.chat(
+                model=LLM_MODEL,
+                messages=[
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "user",   "content": prompt},
+                ],
+                stream=True,
+                options={
+                    "temperature": 0.7,
+                    "top_p":       0.9,
+                    "top_k":       20,    # limits vocab search → faster sampling
+                    "num_predict": 150,   # shorter max reply → faster overall
+                    "num_ctx":     1024,  # smaller context window → faster prefill
+                },
+            )
 
-            history.append({"user": user_input, "assistant": response})
+            for chunk in stream:
+                token = chunk["message"]["content"]
+                if token:
+                    full_reply.append(token)
+                    yield sse("token", token)
 
-            if len(history) > MAX_HISTORY:
-                history = history[-MAX_HISTORY:]
+            # Persist to history once stream is complete
+            reply_text = "".join(full_reply).strip()
+            conversation_history.append({"user": user_message, "assistant": reply_text})
+            if len(conversation_history) > MAX_HISTORY:
+                conversation_history[:] = conversation_history[-MAX_HISTORY:]
+
+            yield sse("done", "")
 
         except Exception as e:
-            print(f"\n[Error: {e}]\nPlease make sure Ollama is running and both 'phi3:latest' and 'nomic-embed-text' are installed via 'ollama pull <model>'\n")
+            yield sse("error", str(e))
+
+    return Response(
+        stream_with_context(generate()),
+        mimetype="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",   # disable nginx buffering if behind a proxy
+        },
+    )
 
 
+@app.route("/reset", methods=["POST"])
+def reset():
+    global conversation_history
+    conversation_history = []
+    return jsonify({"status": "ok"})
+
+
+# ── Entry point ───────────────────────────────────────────────────────────────
 if __name__ == "__main__":
-    main()
+    # threaded=True is required for SSE to work correctly in dev mode
+    app.run(debug=True, host="127.0.0.1", port=5000, threaded=True)
