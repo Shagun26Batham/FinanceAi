@@ -9,7 +9,7 @@
 ![License](https://img.shields.io/badge/License-MIT-green)
 ![Status](https://img.shields.io/badge/Status-Active-brightgreen)
 
-FinanceAI is a fully local, privacy-first financial advisor chatbot built with a **Retrieval-Augmented Generation (RAG)** pipeline. It runs 100% on your machine — no cloud APIs, no data leaks.
+FinanceAI is a fully local, privacy-first financial advisor chatbot built with a **Retrieval-Augmented Generation (RAG)** pipeline. It runs 100% on your machine — no cloud APIs, no data leaks. Designed specifically for Indian users, it provides structured, beginner-friendly financial guidance.
 
 ---
 
@@ -17,8 +17,15 @@ FinanceAI is a fully local, privacy-first financial advisor chatbot built with a
 
 - **100% Local Execution** — All inference stays on your device. Zero data sent externally.
 - **RAG Pipeline** — Retrieves relevant context from your own `.csv` financial data via ChromaDB.
+- **Domain-Specific AI** — Strictly restricted to finance topics; non-finance queries are politely refused.
+- **Hybrid Domain Detection** — Combines keyword matching + LLM classification for smarter query filtering.
+- **Greeting Support** — Handles greetings naturally without triggering finance refusal.
+- **High-Risk Detection** — Automatically flags crypto, trading, and speculative topics with a risk disclaimer.
+- **Personalization Signals** — Detects when users share personal data (income, salary, EMI) and tailors responses.
+- **Structured Responses** — Every answer follows a consistent 4-part format: Answer → Explanation → Actionable Steps → Clarifying Question.
 - **Streaming Responses** — Real-time token streaming via Server-Sent Events (SSE) for a fluid, ChatGPT-like experience.
 - **Conversation Memory** — Maintains the last 5 turns of chat history for contextual replies.
+- **India-First Localization** — Prefers INR, SIPs, PPF, ELSS, NPS, and Indian tax concepts.
 - **Modern UI** — Clean, responsive dark/light SaaS interface with auto-scroll, typing indicator, and welcome chips.
 - **Markdown Rendering** — Bot replies are rendered as rich Markdown via `marked.js`.
 
@@ -84,6 +91,14 @@ Clears the server-side conversation history.
 **Response:**
 ```json
 { "status": "ok" }
+```
+
+### `GET /health`
+Returns server and model status.
+
+**Response:**
+```json
+{ "status": "ok", "model": "phi3:latest", "embed": "nomic-embed-text" }
 ```
 
 ---
@@ -160,21 +175,39 @@ Key constants are defined at the top of each file for easy tuning:
 
 ---
 
+## 🤖 How Domain Filtering Works
+
+FinanceAI uses a **three-layer approach** to decide whether to answer a query:
+
+1. **Greeting check** — Greetings like "hi" or "hello" are handled immediately with a friendly response, without triggering any LLM or RAG call.
+2. **Keyword check** — A fast lookup against a curated set of finance-related terms (stocks, SIP, EMI, tax, etc.).
+3. **LLM fallback** — If no keyword matches, Phi-3 classifies the query as finance-related or not (YES/NO) before proceeding.
+
+Queries that fail all three layers receive a polite refusal.
+
+---
+
+## 📤 Response Format
+
+Every finance answer follows this mandatory structure:
+
+1. **Answer** — Direct response to the question
+2. **Explanation** — Brief reasoning grounded in retrieved context
+3. **Actionable Steps** — Practical next steps (if applicable)
+4. **Clarifying Question** — Follow-up if key information is missing
+
+---
+
 ## 🔍 Troubleshooting
 
 | Problem | Fix |
 |---|---|
 | `Connection refused` on `/chat` | Make sure `python app.py` is running and Ollama is active |
 | `model not found` error | Run `ollama pull phi3:latest` and `ollama pull nomic-embed-text` |
-| Empty responses from RAG | Check that `python ingest.py` completed without errors |
+| Greetings being refused | Ensure `GREETING_KEYWORDS` set is present in `app.py` |
+| Vague queries not recognized | LLM fallback in `is_finance_query()` handles this automatically |
+| Empty or short answers | Lower `temperature` to `0.3` and increase `num_predict` if needed |
 | No `.csv` data found | Ensure files are placed inside the `data/` directory |
-
----
-
-## 👤 Author
-
-**Shagun Batham**  
-Full-Stack Developer  | Lovely Professional University
 
 ---
 
